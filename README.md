@@ -1,3 +1,30 @@
+# coex: faster inference fork
+
+> **You are on `cuda-kernels`.** Research fork of [antabangun/coex](https://github.com/antabangun/coex) (base `a98b37d`; `main` mirrors upstream). Custom CUDA kernels, so this branch does not export to ONNX / TensorRT; there is no `portable` branch for this repo.
+>
+> What needs the kernels: the fp16 fast path in the `*_fast.py` / `inference.py` files (cuDNN-frontend fp16-accumulate convolutions, CUTLASS fused-epilogue convs, cost-volume / correlation kernels). Upstream's own modules and weights are unchanged.
+>
+> Build: prebuilt cubins (sm_80/86/89/90/120) and one CUTLASS shared library sit in `prebuilt/` next to the code (each < 3 MB). If a prebuilt does not match your GPU or the source hash, the code compiles it with `nvcc` from `CUDA_HOME` (default `/usr/local/cuda`) into `~/.cache`; the CUTLASS library is only rebuilt from source with `CUTLASS_DIR` set (CUTLASS v4.7.1 headers). fp16-accumulate convs need `pip install nvidia-cudnn-frontend`.
+>
+
+> Licence, as upstream (GPL-3.0)
+
+
+Released weights, RTX 5060 Ti 16 GB, torch 2.14.1+cu130, 2026-10-23. KITTI = 000000_10 (1242x375), Midd-H = Middlebury trainingH Motorcycle (1482x994). Median of 10 runs after warm-up (the first-call column is the very first call of a fresh process). Peak memory = torch peak allocated / reserved over the whole run (both sizes). EPE = mean over 3 ETH3D + 3 Middlebury-H training pairs (short check, not a benchmark; a pair that ran out of memory in any row is left out of the EPE mean of all rows). flags = set from the driver only, no upstream source edit: `torch.inference_mode()`, `cudnn.benchmark=True`, TF32 allowed, plus the fastest combination that keeps EPE within noise (listed in brackets in the row). `torch.compile` is not part of the row.
+
+
+
+| version | KITTI ms | Midd-H ms | speed-up at H (vs flags / vs upstream) | peak MB (alloc / reserved) | startup / first call / new size | ETH3D EPE | Midd-H EPE |
+|---|---|---|---|---|---|---|---|
+| upstream (fp16 autocast) | 16.3 | 59.8 | 1.00x | 2094 / 2538 | 2.8 s / 1.35 s / 0.08 s | 18.523 | 17.585 |
+| upstream + flags (model.half(), channels_last, cudnn.benchmark, TF32, inference_mode) | 14.3 | 49.7 | 1.00x / 1.20x | 5040 / 5186 | 2.6 s / 2.47 s / 3.02 s | 18.523 | 17.603 |
+| **cuda-kernels** | 14.1 | 40.2 | 1.24x / 1.49x | 2177 / 2296 | 2.5 s / 0.73 s / 0.18 s | 18.497 | 17.575 |
+
+Max / mean abs disparity difference cuda-kernels vs upstream: 66.5 px / 0.0801 px (KITTI + 6 EPE pairs; the maximum is set by a few single pixels).
+
+
+---
+
 # CoEx
 
 PyTorch implementation of our paper: 
